@@ -1,0 +1,74 @@
+name: Sync GitHub GraphQL Schema
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sync-schema:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Download GitHub GraphQL Schema
+        run: |
+          echo "Downloading GitHub GraphQL Schema..."
+          curl -o schema.docs.graphql https://docs.github.com/public/fpt/schema.docs.graphql
+          
+          # ダウンロードが成功したかチェック
+          if [ ! -f schema.docs.graphql ]; then
+            echo "Failed to download schema file"
+            exit 1
+          fi
+          
+          # ファイルサイズをチェック（空でないことを確認）
+          if [ ! -s schema.docs.graphql ]; then
+            echo "Downloaded schema file is empty"
+            exit 1
+          fi
+          
+          echo "Schema file downloaded successfully"
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          # Gitの設定
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # 変更があるかチェック
+          if git diff --quiet schema.docs.graphql; then
+            echo "No changes detected in schema file"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected in schema file"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          # ファイルをステージング
+          git add schema.docs.graphql
+          
+          # コミットメッセージを作成
+          commit_message="Sync GitHub GraphQL schema - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          
+          # コミット
+          git commit -m "$commit_message"
+          
+          # mainブランチにプッシュ
+          git push origin main
+          
+          echo "Schema synced and committed successfully"
+
+      - name: No changes
+        if: steps.check_changes.outputs.has_changes == 'false'
+        run: |
+          echo "No changes in schema file. Skipping commit."
