@@ -93,7 +93,7 @@ jobs:
             schema.docs-enterprise-3.15.graphql \
             schema.docs-enterprise-3.14.graphql || true
 
-          commit_message="Sync GitHub GraphQL schemas - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          commit_message="chore: sync schemas"
 
           # Only commit if there is something to commit
           if git diff --staged --quiet; then
