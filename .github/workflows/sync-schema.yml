@@ -16,46 +16,92 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Download GitHub GraphQL Schema
+      - name: Download multiple GitHub GraphQL Schemas
         run: |
-          echo "Downloading GitHub GraphQL Schema..."
-          curl -o schema.docs.graphql https://docs.github.com/public/fpt/schema.docs.graphql
-          
-          # Check if download was successful
-          if [ ! -f schema.docs.graphql ]; then
-            echo "Failed to download schema file"
-            exit 1
-          fi
-          
-          # Check file size (ensure it's not empty)
-          if [ ! -s schema.docs.graphql ]; then
-            echo "Downloaded schema file is empty"
-            exit 1
-          fi
-          
-          echo "Schema file downloaded successfully"
+          set -euo pipefail
+          echo "Downloading multiple GitHub GraphQL Schemas..."
+
+          declare -A urls=(
+            [schema.docs.graphql]=https://docs.github.com/public/fpt/schema.docs.graphql
+            [schema.docs-ghec.graphql]=https://docs.github.com/public/ghec/schema.docs.graphql
+            [schema.docs-enterprise-3.18.graphql]=https://docs.github.com/public/ghes-3.18/schema.docs-enterprise.graphql
+            [schema.docs-enterprise-3.17.graphql]=https://docs.github.com/public/ghes-3.17/schema.docs-enterprise.graphql
+            [schema.docs-enterprise-3.16.graphql]=https://docs.github.com/public/ghes-3.16/schema.docs-enterprise.graphql
+            [schema.docs-enterprise-3.15.graphql]=https://docs.github.com/public/ghes-3.15/schema.docs-enterprise.graphql
+            [schema.docs-enterprise-3.14.graphql]=https://docs.github.com/public/ghes-3.14/schema.docs-enterprise.graphql
+          )
+
+          for name in "${!urls[@]}"; do
+            url=${urls[$name]}
+            echo "Downloading $url -> $name"
+            curl -fsSL --retry 3 --retry-delay 2 -o "$name" "$url" || {
+              echo "Warning: failed to download $url"
+              continue
+            }
+
+            # Ensure file is not empty
+            if [ ! -s "$name" ]; then
+              echo "Warning: downloaded $name is empty; removing"
+              rm -f "$name"
+              continue
+            fi
+
+            echo "Saved $name (size: $(wc -c < "$name") bytes)"
+          done
 
       - name: Check for changes
         id: check_changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          
-          # Check for changes (including new files)
-          if [ -n "$(git status --porcelain schema.docs.graphql)" ]; then
-            echo "Changes detected in schema file"
+
+          # List of schema files we may have downloaded
+          files=(
+            schema.docs.graphql
+            schema.docs-ghec.graphql
+            schema.docs-enterprise-3.18.graphql
+            schema.docs-enterprise-3.17.graphql
+            schema.docs-enterprise-3.16.graphql
+            schema.docs-enterprise-3.15.graphql
+            schema.docs-enterprise-3.14.graphql
+          )
+
+          changes_found=false
+          for f in "${files[@]}"; do
+            if [ -f "$f" ] && [ -n "$(git status --porcelain -- "$f")" ]; then
+              echo "Changes detected in $f"
+              changes_found=true
+            fi
+          done
+
+          if [ "$changes_found" = true ]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
           else
-            echo "No changes detected in schema file"
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Commit and push changes
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
-          git add schema.docs.graphql
-          commit_message="Sync GitHub GraphQL schema - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          # Add any of the known schema files that exist
+          git add --all \
+            schema.docs.graphql \
+            schema.docs-ghec.graphql \
+            schema.docs-enterprise-3.18.graphql \
+            schema.docs-enterprise-3.17.graphql \
+            schema.docs-enterprise-3.16.graphql \
+            schema.docs-enterprise-3.15.graphql \
+            schema.docs-enterprise-3.14.graphql || true
+
+          commit_message="Sync GitHub GraphQL schemas - $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+          # Only commit if there is something to commit
+          if git diff --staged --quiet; then
+            echo "No staged changes to commit"
+            exit 0
+          fi
+
           git commit -m "$commit_message"
           git push origin main
-          
-          echo "Schema synced and committed successfully"
+
+          echo "Schemas synced and committed successfully"
