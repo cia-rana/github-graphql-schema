@@ -8,6 +8,11 @@ on:
 jobs:
   sync-schema:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      models: read
+    env:
+      MODEL: openai/gpt-4.1 # `gh models list` to see available model IDs. ref. https://github.com/github/gh-models
     
     steps:
       - name: Checkout repository
@@ -80,10 +85,11 @@ jobs:
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Commit and push changes
+      - name: Prepare staged diff
+        id: prepare_diff
         if: steps.check_changes.outputs.has_changes == 'true'
         run: |
-          # Add any of the known schema files that exist
+          # Stage changed schema files
           git add --all \
             schema.docs.graphql \
             schema.docs-ghec.graphql \
@@ -93,15 +99,72 @@ jobs:
             schema.docs-enterprise-3.15.graphql \
             schema.docs-enterprise-3.14.graphql || true
 
-          commit_message="chore: sync schemas"
-
-          # Only commit if there is something to commit
+          # Exit early if nothing staged
           if git diff --staged --quiet; then
             echo "No staged changes to commit"
+            echo "has_staged_changes=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          git commit -m "$commit_message"
+          echo "has_staged_changes=true" >> $GITHUB_OUTPUT
+
+          # Write a compact name-status list for the AI to summarize
+          git diff --staged --name-status > staged_name_status.txt || true
+          # Also include a small unified diff (limited) to give context
+          git --no-pager diff --staged | head -n 1000 > staged_unified_diff.txt || true
+
+      - name: Generate commit message with AI
+        id: inference
+        if: steps.prepare_diff.outputs.has_staged_changes == 'true'
+        uses: actions/ai-inference@v2.0.1
+        with:
+          prompt-file: ./.github/prompts/commit-message.prompt.yml
+          file_input: |
+            name_status: ./staged_name_status.txt
+            unified_diff: ./staged_unified_diff.txt
+          model: ${{ env.MODEL }}
+          max-tokens: 12000
+
+      - name: Parse AI output
+        if: steps.inference.outputs.response != '' && steps.prepare_diff.outputs.has_staged_changes == 'true'
+        id: parse
+        run: |
+          # Prefer response-file when available
+          if [ -n "${{ steps.inference.outputs.response-file }}" ] && [ -f "${{ steps.inference.outputs.response-file }}" ]; then
+            RESP_FILE="${{ steps.inference.outputs.response-file }}"
+          else
+            RESP_FILE="/tmp/ai_response.json"
+            echo "${{ steps.inference.outputs.response }}" > "$RESP_FILE"
+          fi
+
+          # Read JSON response (the prompt enforces JSON-only output)
+          if [ -f "$RESP_FILE" ] && jq -e . "$RESP_FILE" >/dev/null 2>&1; then
+            TITLE=$(jq -r '.title' "$RESP_FILE")
+            BODY=$(jq -r '.body' "$RESP_FILE")
+          else
+            TITLE="chore: sync schemas"
+            BODY="Schemas updated."
+          fi
+
+          # Safety: enforce limits (title <=50 chars, body wrapped at 72 chars)
+          TITLE=$(printf "%s" "$TITLE" | cut -c1-50)
+          BODY=$(printf "%s" "$BODY" | fold -s -w72)
+
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
+          echo "body=$BODY" >> $GITHUB_OUTPUT
+
+      - name: Commit and push
+        if: steps.parse.outputs.title != '' && steps.prepare_diff.outputs.has_staged_changes == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+          TITLE="${{ steps.parse.outputs.title }}"
+          BODY="${{ steps.parse.outputs.body }}"
+
+          # Create commit with title and multi-line body
+          printf "%s\n\n%s\n" "$TITLE" "$BODY" > /tmp/COMMIT_MSG
+          git commit -F /tmp/COMMIT_MSG
           git push origin main
 
           echo "Schemas synced and committed successfully"
