@@ -1,0 +1,87 @@
+name: Changes Summary
+
+description: "Generate commit message summary using AI from staged diff"
+
+inputs:
+  prompt_file:
+    description: |
+      Prompt file for AI inference
+    required: false
+    default: ./.github/prompts/commit-message.prompt.yml
+  model:
+    description: |
+      AI model ID
+      `gh models list` to see available model IDs. ref: https://github.com/github/gh-models
+    required: false
+    default: openai/gpt-4o
+  max_tokens:
+    description: |
+      Max tokens for AI output
+    required: false
+    default: '4000'
+  default_title:
+    description: |
+      Default commit title if empty
+    required: false
+    default: 'chore: sync schemas'
+  default_body:
+    description: |
+      Default commit body if empty
+    required: false
+    default: 'Schemas updated.'
+
+outputs:
+  title:
+    description: 'Commit title'
+    value: ${{ steps.parse.outputs.title }}
+  body:
+    description: 'Commit body'
+    value: ${{ steps.parse.outputs.body }}
+  has_staged_changes:
+    description: 'Whether staged changes exist'
+    value: ${{ steps.diff.outputs.has_staged_changes }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Generate staged diff files
+      id: diff
+      run: |
+        if git diff --staged --quiet; then
+          echo "has_staged_changes=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        echo "has_staged_changes=true" >> $GITHUB_OUTPUT
+        git diff --staged --name-status > staged_name_status.txt || true
+        git --no-pager diff --staged | head -n 1000 > staged_unified_diff.txt || true
+      shell: bash
+    - name: Generate commit message
+      id: generate
+      uses: actions/ai-inference@v2.0.1
+      with:
+        prompt-file: ${{ inputs.prompt_file }}
+        file_input: |
+          name_status: staged_name_status.txt
+          unified_diff: staged_unified_diff.txt
+        model: ${{ inputs.model }}
+        max-tokens: ${{ inputs.max_tokens }}
+    - name: Parse generated message
+      id: parse
+      if: steps.generate.outputs.response != ''
+      shell: bash
+      run: |
+        if [ -n "${{ steps.generate.outputs.response-file }}" ] && [ -f "${{ steps.generate.outputs.response-file }}" ]; then
+          RESP_FILE="${{ steps.generate.outputs.response-file }}"
+        else
+          RESP_FILE="/tmp/generated_commit_message.json"
+          echo "${{ steps.generate.outputs.response }}" > "$RESP_FILE"
+        fi
+
+        if [ -f "$RESP_FILE" ] && jq -e . "$RESP_FILE" >/dev/null 2>&1; then
+          TITLE=$(jq -r '.title // empty' "$RESP_FILE")
+          BODY=$(jq -r '.body // empty' "$RESP_FILE")
+        fi
+        TITLE="${TITLE:-${{ inputs.default_title }}}"
+        BODY="${BODY:-${{ inputs.default_body }}}"
+        echo "title=$TITLE" >> $GITHUB_OUTPUT
+        echo "body=$BODY" >> $GITHUB_OUTPUT

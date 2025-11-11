@@ -54,13 +54,9 @@ jobs:
             echo "Saved $name (size: $(wc -c < "$name") bytes)"
           done
 
-      - name: Check for changes
-        id: check_changes
+      - name: Stage changed schema files
+        id: stage_schemas
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-
-          # List of schema files we may have downloaded
           files=(
             schema.docs.graphql
             schema.docs-ghec.graphql
@@ -70,97 +66,26 @@ jobs:
             schema.docs-enterprise-3.15.graphql
             schema.docs-enterprise-3.14.graphql
           )
-
-          changes_found=false
           for f in "${files[@]}"; do
             if [ -f "$f" ] && [ -n "$(git status --porcelain -- "$f")" ]; then
-              echo "Changes detected in $f"
-              changes_found=true
+              git add --all "$f" || true
             fi
           done
 
-          if [ "$changes_found" = true ]; then
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Prepare staged diff
-        id: prepare_diff
-        if: steps.check_changes.outputs.has_changes == 'true'
-        run: |
-          # Stage changed schema files
-          git add --all \
-            schema.docs.graphql \
-            schema.docs-ghec.graphql \
-            schema.docs-enterprise-3.18.graphql \
-            schema.docs-enterprise-3.17.graphql \
-            schema.docs-enterprise-3.16.graphql \
-            schema.docs-enterprise-3.15.graphql \
-            schema.docs-enterprise-3.14.graphql || true
-
-          # Exit early if nothing staged
-          if git diff --staged --quiet; then
-            echo "No staged changes to commit"
-            echo "has_staged_changes=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          echo "has_staged_changes=true" >> $GITHUB_OUTPUT
-
-          # Write a compact name-status list for the AI to summarize
-          git diff --staged --name-status > staged_name_status.txt || true
-          # Also include a small unified diff (limited) to give context
-          git --no-pager diff --staged | head -n 1000 > staged_unified_diff.txt || true
-
       - name: Generate commit message with AI
-        id: inference
-        if: steps.prepare_diff.outputs.has_staged_changes == 'true'
-        uses: actions/ai-inference@v2.0.1
+        id: changes_summary
+        uses: ./.github/actions/changes-summary
         with:
-          prompt-file: ./.github/prompts/commit-message.prompt.yml
-          file_input: |
-            name_status: ./staged_name_status.txt
-            unified_diff: ./staged_unified_diff.txt
           model: ${{ env.MODEL }}
-          max-tokens: 12000
-
-      - name: Parse AI output
-        if: steps.inference.outputs.response != '' && steps.prepare_diff.outputs.has_staged_changes == 'true'
-        id: parse
-        run: |
-          # Prefer response-file when available
-          if [ -n "${{ steps.inference.outputs.response-file }}" ] && [ -f "${{ steps.inference.outputs.response-file }}" ]; then
-            RESP_FILE="${{ steps.inference.outputs.response-file }}"
-          else
-            RESP_FILE="/tmp/ai_response.json"
-            echo "${{ steps.inference.outputs.response }}" > "$RESP_FILE"
-          fi
-
-          # Read JSON response (the prompt enforces JSON-only output)
-          if [ -f "$RESP_FILE" ] && jq -e . "$RESP_FILE" >/dev/null 2>&1; then
-            TITLE=$(jq -r '.title' "$RESP_FILE")
-            BODY=$(jq -r '.body' "$RESP_FILE")
-          else
-            TITLE="chore: sync schemas"
-            BODY="Schemas updated."
-          fi
-
-          # Safety: enforce limits (title <=50 chars, body wrapped at 72 chars)
-          TITLE=$(printf "%s" "$TITLE" | cut -c1-50)
-          BODY=$(printf "%s" "$BODY" | fold -s -w72)
-
-          echo "title=$TITLE" >> $GITHUB_OUTPUT
-          echo "body=$BODY" >> $GITHUB_OUTPUT
 
       - name: Commit and push
-        if: steps.parse.outputs.title != '' && steps.prepare_diff.outputs.has_staged_changes == 'true'
+        if: steps.changes_summary.outputs.has_staged_changes == 'true'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
 
-          TITLE="${{ steps.parse.outputs.title }}"
-          BODY="${{ steps.parse.outputs.body }}"
+          TITLE="${{ steps.changes_summary.outputs.title }}"
+          BODY="${{ steps.changes_summary.outputs.body }}"
 
           # Create commit with title and multi-line body
           printf "%s\n\n%s\n" "$TITLE" "$BODY" > /tmp/COMMIT_MSG
