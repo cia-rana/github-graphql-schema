@@ -60,6 +60,7 @@ runs:
       shell: bash
     - name: Generate commit message
       id: generate
+      if: steps.diff.outputs.has_staged_changes == 'true'
       uses: actions/ai-inference@v2.0.1
       with:
         prompt-file: ${{ inputs.prompt_file }}
@@ -70,7 +71,7 @@ runs:
         max-tokens: ${{ inputs.max_tokens }}
     - name: Parse generated message
       id: parse
-      if: steps.generate.outputs.response != ''
+      if: steps.diff.outputs.has_staged_changes == 'true' && steps.generate.outputs.response != ''
       shell: bash
       run: |
         if [ -n "${{ steps.generate.outputs.response-file }}" ] && [ -f "${{ steps.generate.outputs.response-file }}" ]; then
