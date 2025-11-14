@@ -82,20 +82,39 @@ runs:
     - name: Parse generated message
       id: parse
       if: steps.diff.outputs.has_staged_changes == 'true' && steps.generate.outputs.response != ''
-      shell: bash
-      run: |
-        if [ -n "${{ steps.generate.outputs.response-file }}" ] && [ -f "${{ steps.generate.outputs.response-file }}" ]; then
-          RESP_FILE="${{ steps.generate.outputs.response-file }}"
-        else
-          RESP_FILE="/tmp/generated_commit_message.json"
-          echo '${{ steps.generate.outputs.response }}' > "$RESP_FILE"
-        fi
+      uses: actions/github-script@v8.0.0
+      with:
+        script: |
+          const fs = require('fs');
+          const core = require('@actions/core');
 
-        if [ -f "$RESP_FILE" ] && jq -e . "$RESP_FILE" >/dev/null 2>&1; then
-          TITLE=$(jq -r '.title // empty' "$RESP_FILE")
-          BODY=$(jq -r '.body // empty' "$RESP_FILE")
-        fi
-        TITLE="${TITLE:-${{ inputs.default_title }}}"
-        BODY="${BODY:-${{ inputs.default_body }}}"
-        echo "title=$TITLE" >> $GITHUB_OUTPUT
-        echo "body=$BODY" >> $GITHUB_OUTPUT
+          const respFileEnv = process.env.MODEL_RESP_FILE;
+          let respFile;
+          if (respFileEnv && fs.existsSync(respFileEnv)) {
+            respFile = respFileEnv;
+          } else {
+            respFile = '/tmp/generated_commit_message.json';
+            fs.writeFileSync(respFile, process.env.MODEL_RESP || '', 'utf8');
+          }
+
+          let title = '';
+          let body = '';
+          try {
+            const content = fs.readFileSync(respFile, 'utf8');
+            const j = JSON.parse(content);
+            title = j.title || '';
+            body = j.body || '';
+          } catch (e) {
+            // ignore parse errors; fall back to defaults below
+          }
+
+          if (!title) title = process.env.DEFAULT_TITLE || '';
+          if (!body) body = process.env.DEFAULT_BODY || '';
+
+          core.setOutput('title', title);
+          core.setOutput('body', body);
+      env:
+        MODEL_RESP: ${{ steps.generate.outputs.response }}
+        MODEL_RESP_FILE: ${{ steps.generate.outputs.response-file }}
+        DEFAULT_TITLE: ${{ inputs.default_title }}
+        DEFAULT_BODY: ${{ inputs.default_body }}
