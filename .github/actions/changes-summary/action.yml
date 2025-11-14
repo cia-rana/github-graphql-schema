@@ -54,8 +54,17 @@ runs:
         echo "has_staged_changes=true" >> $GITHUB_OUTPUT
         git diff --staged --name-status > staged_name_status.txt || true
         git --no-pager diff --staged | head -n 1000 > staged_unified_diff.txt || true
-        awk '{print "        " $0}' staged_unified_diff.txt > staged_unified_diff_indented.txt && mv staged_unified_diff_indented.txt staged_unified_diff.txt
-        ls -l staged_name_status.txt staged_unified_diff.txt
+
+        ls -l
+        cat staged_name_status.txt
+        cat staged_unified_diff.txt
+
+        awk '{printf "%s ", $0}' staged_name_status.txt > staged_name_status_oneline.txt || true
+        sed -E 's/ $//' staged_name_status_oneline.txt > staged_name_status.txt || true && rm -f staged_name_status_oneline.txt || true
+        awk '{printf "%s ", $0}' staged_unified_diff.txt > staged_unified_diff_oneline.txt || true
+        sed -E 's/ $//' staged_unified_diff_oneline.txt > staged_unified_diff.txt || true && rm -f staged_unified_diff_oneline.txt || true
+
+        ls -l
         cat staged_name_status.txt
         cat staged_unified_diff.txt
       shell: bash
