@@ -46,7 +46,7 @@ messages:
 
       Use that combined context to generate a concise commit title and body.
 
-model: openai/gpt-5
+model: openai/gpt-5-mini
 responseFormat: json_schema
 jsonSchema: |-
   {
