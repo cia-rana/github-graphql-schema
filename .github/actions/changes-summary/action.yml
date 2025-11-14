@@ -86,7 +86,6 @@ runs:
       with:
         script: |
           const fs = require('fs');
-          const core = require('@actions/core');
 
           const respFileEnv = process.env.MODEL_RESP_FILE;
           let respFile;
@@ -105,7 +104,7 @@ runs:
             title = j.title || '';
             body = j.body || '';
           } catch (e) {
-            // ignore parse errors; fall back to defaults below
+            console.warn(e && e.message ? e.message : String(e));
           }
 
           if (!title) title = process.env.DEFAULT_TITLE || '';
