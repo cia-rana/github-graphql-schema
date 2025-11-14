@@ -42,7 +42,6 @@ messages:
       ````
       Name-Status: |
       {{name_status}}
-      ---
       Unified-Diff: |
       {{unified_diff}}
       ````
