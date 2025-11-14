@@ -41,10 +41,10 @@ messages:
       Example of how you should interpret inputs:
       ````
       Name-Status: |
-        {{name_status}}
+      {{name_status}}
       ---
       Unified-Diff: |
-        {{unified_diff}}
+      {{unified_diff}}
       ````
 
       Use that combined context to generate a concise commit title and body.
