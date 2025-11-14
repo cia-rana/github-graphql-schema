@@ -88,7 +88,9 @@ runs:
           RESP_FILE="${{ steps.generate.outputs.response-file }}"
         else
           RESP_FILE="/tmp/generated_commit_message.json"
-          echo "${{ steps.generate.outputs.response }}" > "$RESP_FILE"
+          cat > "$RESP_FILE" <<'MODEL_RESP'
+          ${{ steps.generate.outputs.response }}
+          MODEL_RESP
         fi
 
         if [ -f "$RESP_FILE" ] && jq -e . "$RESP_FILE" >/dev/null 2>&1; then
