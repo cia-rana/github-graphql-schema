@@ -80,14 +80,13 @@ jobs:
 
       - name: Commit and push
         if: steps.changes_summary.outputs.has_staged_changes == 'true'
+        env:
+          TITLE: ${{ steps.changes_summary.outputs.title }}
+          BODY: ${{ steps.changes_summary.outputs.body }}
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
 
-          TITLE="${{ steps.changes_summary.outputs.title }}"
-          BODY="${{ steps.changes_summary.outputs.body }}"
-
-          # Create commit with title and multi-line body
           printf "%s\n\n%s\n" "$TITLE" "$BODY" > /tmp/COMMIT_MSG
           git commit -F /tmp/COMMIT_MSG
           git push origin main
