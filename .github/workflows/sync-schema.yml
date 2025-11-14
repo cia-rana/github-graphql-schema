@@ -12,7 +12,7 @@ jobs:
       contents: write
       models: read
     env:
-      MODEL: openai/gpt-4.1 # `gh models list` to see available model IDs. ref. https://github.com/github/gh-models
+      MODEL: openai/gpt-5 # `gh models list` to see available model IDs. ref. https://github.com/github/gh-models
     
     steps:
       - name: Checkout repository
