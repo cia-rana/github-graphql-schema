@@ -29,6 +29,8 @@ jobs:
           declare -A urls=(
             [schema.docs.graphql]=https://docs.github.com/public/fpt/schema.docs.graphql
             [schema.docs-ghec.graphql]=https://docs.github.com/public/ghec/schema.docs.graphql
+            [schema.docs-enterprise-3.20.graphql]=https://docs.github.com/public/ghes-3.20/schema.docs-enterprise.graphql
+            [schema.docs-enterprise-3.19.graphql]=https://docs.github.com/public/ghes-3.19/schema.docs-enterprise.graphql
             [schema.docs-enterprise-3.18.graphql]=https://docs.github.com/public/ghes-3.18/schema.docs-enterprise.graphql
             [schema.docs-enterprise-3.17.graphql]=https://docs.github.com/public/ghes-3.17/schema.docs-enterprise.graphql
             [schema.docs-enterprise-3.16.graphql]=https://docs.github.com/public/ghes-3.16/schema.docs-enterprise.graphql
@@ -60,6 +62,8 @@ jobs:
           files=(
             schema.docs.graphql
             schema.docs-ghec.graphql
+            schema.docs-enterprise-3.20.graphql
+            schema.docs-enterprise-3.19.graphql
             schema.docs-enterprise-3.18.graphql
             schema.docs-enterprise-3.17.graphql
             schema.docs-enterprise-3.16.graphql
