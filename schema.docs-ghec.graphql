@@ -69460,7 +69460,7 @@ type User implements Actor & Agentic & Node & PackageOwner & ProfileOwner & Proj
   ): Organization
 
   """
-  Verified email addresses that match verified domains for a specified organization the user is a member of.
+  Verified email addresses that match verified domains for a specified organization the user is a member of. Results are unordered. There is no way to specify ordering, priority, or filtering, and this field should not be used to determine a user's canonical or current corporate email in multi-domain contexts.
   """
   organizationVerifiedDomainEmails(
     """
